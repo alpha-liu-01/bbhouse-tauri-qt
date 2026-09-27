@@ -149,7 +149,7 @@ FluPage {
         PlayerController.playSeason({title: detail.title, coverUrl: detail.coverUrl,
             regional: false, lastEpId: detail.lastEpId, lastTimeSeconds: detail.lastTimeSeconds},
             episodes, startIndex)
-        FluRouter.navigate("/player")
+        AppRoutes.openPlayer()
     }
     Connections {
         target: PopularSeasonController

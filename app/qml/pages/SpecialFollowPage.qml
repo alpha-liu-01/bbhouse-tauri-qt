@@ -237,7 +237,7 @@ FluPage {
             return
         }
         PlayerController.playRange(entries.map(page.cardForDisplay))
-        FluRouter.navigate("/player")
+        AppRoutes.openPlayer()
     }
 
     // ---- 管理弹层 ----

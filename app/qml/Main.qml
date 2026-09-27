@@ -1,12 +1,13 @@
 import QtQuick
 import FluentUI
+import bbhouse
 
 FluLauncher {
     id: launcher
 
     Connections {
         target: LoginController
-        function onLoginRequested() { FluRouter.navigate("/login") }
+        function onLoginRequested() { AppRoutes.openLogin() }
     }
 
     Component.onCompleted: {

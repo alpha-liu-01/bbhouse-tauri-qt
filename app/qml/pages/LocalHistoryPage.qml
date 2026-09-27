@@ -409,8 +409,20 @@ FluPage {
     }
     Connections {
         target: HistoryServiceController
-        function onRegistrationRequired() { register_service_dialog.open() }
-        function onOpenRequested() { FluRouter.navigate("/history-service") }
+        function onRegistrationRequired() {
+            if (AppFormFactor.compact) {
+                info_bar.showError(qsTr("当前系统不支持定时历史服务"), 6000)
+                return
+            }
+            register_service_dialog.open()
+        }
+        function onOpenRequested() {
+            if (AppFormFactor.compact) {
+                info_bar.showError(qsTr("当前系统不支持定时历史服务"), 6000)
+                return
+            }
+            FluRouter.navigate("/history-service")
+        }
         function onOperationFailed(message) { if (page.visible) info_bar.showError(message, 6000) }
     }
     Component.onCompleted: {

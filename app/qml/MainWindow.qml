@@ -36,13 +36,17 @@ FluWindow {
     readonly property bool searchVisible: spaceVisible || cardPages.indexOf(currentPage) !== -1
     readonly property bool compactShell: AppFormFactor.compact
     onCompactShellChanged: {
-        if (compactShell) return
+        if (compactShell) {
+            adoptCompactLogin()
+            return
+        }
         search_box_compact.submit()
         searchExpanded = false
         moreOpen = false
         search_box_mac.restoreFromPage()
         search_box.restoreFromPage()
     }
+    property string overlay: ""
     property bool searchExpanded: false
     property bool moreOpen: false
     readonly property var morePageKeys: ["special", "watchlater", "online", "local", "downloads", "settings", "about"]
@@ -91,6 +95,28 @@ FluWindow {
             return
         }
         nav_view.setCurrentIndex(index)
+    }
+    function adoptCompactLogin() {
+        if (!AppFormFactor.compact || overlay === "login") return
+        var list = FluRouter.windows
+        var loginWindow = null
+        for (var i = 0; i < list.length; i++) {
+            if (list[i] && list[i]._route === "/login") loginWindow = list[i]
+        }
+        if (!loginWindow) return
+        overlay = "login"
+        loginWindow.close()
+    }
+    function dismissEmbeddedPlayback() {
+        var item = overlay_host.item
+        if (overlay === "player") {
+            if (item) item.releasePlayback()
+            PlayerController.closeRequested()
+        } else if (overlay === "live") {
+            if (item) item.releasePlayback()
+            LivePlayerController.closeRequested()
+        }
+        overlay = ""
     }
 
     // 页面只在访问后创建；后台超时同时释放视图和可重建的浏览缓存。
@@ -162,8 +188,17 @@ FluWindow {
         nav_view.setCurrentIndex(LoginController.needsLogin ? 9 : 0)
         smokeNavigate()
         window_limits.captureDesktopFloor()
+        adoptCompactLogin()
+    }
+    Connections {
+        target: AppRoutes
+        function onPlayerRequested() { window.overlay = "player" }
+        function onLiveRequested() { window.overlay = "live" }
+        function onLoginRequested() { window.overlay = "login" }
     }
     onWidthChanged: window_limits.noteHostWidth(width)
+    function suspendForFullscreen() { window_limits.suspendForFullscreen() }
+    function resumeFromFullscreen() { window_limits.resumeFromFullscreen() }
 
     appBar: FluAppBar {
         id: app_bar
@@ -643,6 +678,42 @@ FluWindow {
         visible: window.spaceVisible
         sourceComponent: UserSpacePage {
             onBackRequested: window.returnFromSpace()
+        }
+    }
+
+    Loader {
+        id: overlay_host
+        anchors.fill: parent
+        z: 20
+        active: window.overlay !== ""
+        visible: active
+        sourceComponent: window.overlay === "player" ? player_embed
+                : window.overlay === "live" ? live_embed
+                : window.overlay === "login" ? login_embed : null
+    }
+    Component {
+        id: player_embed
+        PlayerView {
+            anchors.fill: parent
+            host: window
+            embedded: true
+            onDismiss: window.dismissEmbeddedPlayback()
+        }
+    }
+    Component {
+        id: live_embed
+        LivePlayerView {
+            anchors.fill: parent
+            host: window
+            embedded: true
+            onDismiss: window.dismissEmbeddedPlayback()
+        }
+    }
+    Component {
+        id: login_embed
+        LoginPage {
+            anchors.fill: parent
+            onCompleted: window.overlay = ""
         }
     }
 

@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import FluentUI
+import bbhouse
 import "../js/Format.js" as Format
 
 FluPage {
@@ -112,7 +113,7 @@ FluPage {
                     Keys.onSpacePressed: play()
                     function play() {
                         LivePlayerController.openRoom(modelData)
-                        FluRouter.navigate("/live-player")
+                        AppRoutes.openLive()
                     }
                     Rectangle {
                         id: cover

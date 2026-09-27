@@ -111,7 +111,7 @@ FluPage {
                       lastEpId: detail.lastEpId,
                       lastTimeSeconds: detail.lastTimeSeconds },
                     detail.episodes, startIndex)
-        FluRouter.navigate("/player")
+        AppRoutes.openPlayer()
     }
 
     // 卡片左键:直接起播该节目(规约:点击卡片起播剧集,不开浏览器)

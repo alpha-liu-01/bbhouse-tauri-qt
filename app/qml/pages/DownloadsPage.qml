@@ -65,7 +65,7 @@ FluPage {
             return
         }
         PlayerController.openWith([local])
-        FluRouter.navigate("/player")
+        AppRoutes.openPlayer()
     }
     function canPlay(entry) {
         return entry.playable === true || entry.available === true

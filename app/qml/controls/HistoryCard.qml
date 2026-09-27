@@ -1,5 +1,6 @@
 import QtQuick
 import FluentUI
+import bbhouse
 import "../js/Format.js" as Format
 
 // 历史卡片(history-browser-ui 卡片信息元素契约):
@@ -173,7 +174,7 @@ Item {
             rawJson: String(cardItem.rawJson || ""),
             linkUrl: linkUrl
         }])
-        FluRouter.navigate("/player")
+        AppRoutes.openPlayer()
     }
 
     function openAuthor() {
