@@ -14,9 +14,9 @@ FluLauncher {
                 ? "qrc:/icons/bbhouse-icon-1024-mac.png"
                 : "qrc:/icons/bbhouse-icon-1024.png"
         FluApp.init(launcher)
-        // macOS:启用系统原生标题栏(红绿灯不与应用内汉堡/搜索框冲突,
-        // 自带圆角与原生窗口感;Windows 保持沉浸式自绘标题栏)
-        if (FluTools.isMacos()) FluApp.useSystemAppBar = true
+        // macOS 与 Linux:启用系统标题栏。Linux 没有 Windows 的命中测试,
+        // 自绘标题栏会和桌面装饰叠成两层。Windows 保持沉浸式自绘标题栏。
+        if (FluTools.isMacos() || FluTools.isLinux()) FluApp.useSystemAppBar = true
         FluRouter.routes = {
             "/": "qrc:/qt/qml/bbhouse/qml/MainWindow.qml",
             "/login": "qrc:/qt/qml/bbhouse/qml/LoginWindow.qml",

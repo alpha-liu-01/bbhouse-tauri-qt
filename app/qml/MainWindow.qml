@@ -158,7 +158,7 @@ FluWindow {
         }
     }
 
-    // macOS 系统标题栏下,汉堡开关与标题栏搜索框下沉到内容区顶部工具行
+    // macOS 与 Linux 的系统标题栏下,汉堡开关与搜索框下沉到内容区顶部工具行
     // (Windows 形态仍由自绘 appBar 承载,该行高度为 0)
     Item {
         id: mac_toolbar
