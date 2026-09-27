@@ -205,7 +205,8 @@ qt_add_resources(bbhouse-qt "app_help"
 
 # i18n: en-US 翻译(lrelease 产物嵌入资源 :/i18n/)
 find_program(QT_LRELEASE NAMES lrelease HINTS
-        "${Qt6_DIR}/../../../bin" "${Qt6_DIR}/../../../libexec/qt6" REQUIRED)
+        "${Qt6_DIR}/../../../bin" "${Qt6_DIR}/../../../libexec/qt6"
+        "${Qt6_DIR}/../../../../lib/qt6/bin" REQUIRED)
 set(BBHOUSE_TS_FILE ${CMAKE_CURRENT_SOURCE_DIR}/translations/bbhouse_en_US.ts)
 set(BBHOUSE_QM_FILE ${CMAKE_CURRENT_BINARY_DIR}/bbhouse_en_US.qm)
 add_custom_command(
@@ -551,7 +552,8 @@ target_link_libraries(user-space-test PRIVATE Qt6::Core Qt6::Network)
 add_test(NAME user-space COMMAND user-space-test)
 
 add_executable(card-author-test EXCLUDE_FROM_ALL ../tools/card_author_test.cpp)
-target_link_libraries(card-author-test PRIVATE Qt6::Quick Qt6::Widgets fluentuiplugin)
+find_package(Qt6 REQUIRED COMPONENTS Test)
+target_link_libraries(card-author-test PRIVATE Qt6::Quick Qt6::Widgets Qt6::Test fluentuiplugin)
 target_compile_definitions(card-author-test PRIVATE
         CARD_QML_PATH="${CMAKE_CURRENT_SOURCE_DIR}/qml/controls/HistoryCard.qml")
 add_test(NAME card-author COMMAND card-author-test)

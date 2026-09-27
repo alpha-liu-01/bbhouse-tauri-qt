@@ -6,12 +6,12 @@
 #include <QFileInfo>
 #include <QJSValue>
 #include <QKeyEvent>
-#include <QMouseEvent>
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QTest>
 #include <memory>
 
 int main(int argc, char **argv) {
@@ -174,11 +174,8 @@ int main(int argc, char **argv) {
     check(count() == 5, "key auto-repeat does not reopen the author");
     auto click = [&](Qt::MouseButton button) {
         const QPointF local = author->mapToScene(QPointF(author->width() / 2, author->height() / 2));
-        const QPointF global = window.mapToGlobal(local.toPoint());
-        QMouseEvent press(QEvent::MouseButtonPress, local, global, button, button, Qt::NoModifier);
-        QMouseEvent release(QEvent::MouseButtonRelease, local, global, button, Qt::NoButton, Qt::NoModifier);
-        QCoreApplication::sendEvent(&window, &press);
-        QCoreApplication::sendEvent(&window, &release);
+        // Qt 6.10 的离屏窗口不把 sendEvent 来的 QMouseEvent 交给 MouseArea。
+        QTest::mouseClick(&window, button, Qt::NoModifier, local.toPoint());
     };
     click(Qt::LeftButton);
     check(count() == 6, "author pointer click emits exactly once");

@@ -4,6 +4,7 @@
 #include <QDebug>
 #include <QPointer>
 #include <QJsonDocument>
+#include <clocale>
 #include <cmath>
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -33,6 +34,9 @@ MpvClient *MpvClient::create(QObject *parent) {
     // 选项口径(对齐原 WinUI 项目 mpv 内核与 wiliwili 实证):
     // keep-open=always 播完只翻 eof-reached 不发 END_FILE;hr-seek 精确定位;
     // idle 复用实例;vo=libmpv 供 render API;hwdec=auto 硬解优先。
+    // libmpv 0.41 在 LC_NUMERIC 非 C 时拒绝创建。QGuiApplication 会按用户区域
+    // 改回该设置，入口处的 setlocale 挡不住测试进程和之后的区域恢复。
+    std::setlocale(LC_NUMERIC, "C");
     mpv_handle *handle = lib->create();
     if (!handle) {
         createError = QStringLiteral("mpv_create failed");
