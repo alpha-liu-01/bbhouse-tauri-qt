@@ -12,12 +12,14 @@ FluTextBox {
         if (searchPage && searchPage.searchQuery !== text)
             searchPage.searchQuery = text
     }
-
-    onSearchPageChanged: {
+    function restoreFromPage() {
         restoringQuery = true
         text = searchPage ? searchPage.searchQuery : ""
         restoringQuery = false
     }
+
+    onSearchPageChanged: restoreFromPage()
+    onVisibleChanged: if (visible) restoreFromPage()
     // 内置清除按钮仅调用 clear()，已失焦时不会自行聚焦输入框。
     // 清空仍作为草稿，重新聚焦后可通过 Enter 或下一次失焦提交。
     onTextChanged: {

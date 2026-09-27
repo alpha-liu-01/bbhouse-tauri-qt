@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import FluentUI
+import bbhouse
 
 FluWindow {
     id: window
@@ -9,6 +10,7 @@ FluWindow {
     height: 720
     minimumWidth: 600
     minimumHeight: 600
+    CompactWindowLimits { id: window_limits; host: window }
     title: qsTr("本地历史 · 定时服务")
     launchMode: FluWindowType.SingleTask
     property bool draftLoaded: false
@@ -229,5 +231,11 @@ FluWindow {
         function onOperationFinished(message) { window.restoreDraft(); info.showSuccess(message, 4000) }
         function onOperationFailed(message) { info.showError(message, 6000) }
     }
-    Component.onCompleted: { restoreDraft(); HistoryServiceController.refresh() }
+    Component.onCompleted: {
+        window_limits.captureDesktopFloor()
+        restoreDraft()
+        HistoryServiceController.refresh()
+    }
+    onWidthChanged: window_limits.sync()
+    onHeightChanged: window_limits.sync()
 }

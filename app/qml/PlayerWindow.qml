@@ -1,5 +1,6 @@
 import QtQuick
 import FluentUI
+import bbhouse
 import "controls"
 import "js/Format.js" as Format
 
@@ -15,12 +16,16 @@ FluWindow {
     height: 720
     minimumWidth: 880
     minimumHeight: 560
+    CompactWindowLimits { id: window_limits; host: window }
     launchMode: FluWindowType.SingleTask
     title: PlayerController.currentTitle.length > 0 ? PlayerController.currentTitle
                                                     : qsTr("播放器")
 
     readonly property bool offscreen: Qt.platform.pluginName === "offscreen"
-    Component.onCompleted: if (!offscreen) PlayerController.attachMediaWindow(window)
+    Component.onCompleted: {
+        window_limits.captureDesktopFloor()
+        if (!offscreen) PlayerController.attachMediaWindow(window)
+    }
     onVisibleChanged: if (visible && !offscreen) PlayerController.attachMediaWindow(window)
     // 播放列表完全收起，仅由底部控制面板手动切换；番剧模式隐藏。
     property bool panelExpanded: true
@@ -45,7 +50,11 @@ FluWindow {
         pokeControls()
         if (!controlsLocked && !video_click.containsMouse) scheduleQuickHide()
     }
-    onWidthChanged: if (width < 1080) panelExpanded = false
+    onWidthChanged: {
+        if (width < 1080) panelExpanded = false
+        window_limits.sync()
+    }
+    onHeightChanged: window_limits.sync()
 
     function pokeControls() {
         controlsShown = true

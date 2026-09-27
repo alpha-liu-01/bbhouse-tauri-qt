@@ -1232,14 +1232,20 @@ Item {
     }
     function setCurrentIndex(index){
         var item = nav_list.model[index]
-        if(item.url){
-            nav_list.currentIndex = index
-            if(item instanceof FluPaneItem){
-                item.tap()
-            }
-        }else{
-            item.onTapListener()
+        if (!item) return
+        var footerCount = layout_footer.count
+        var footerStart = nav_list.count - footerCount
+        nav_list.currentIndex = index
+        if (footerCount > 0 && index >= footerStart) {
+            var footerIndex = index - footerStart
+            layout_footer.currentIndex = footerIndex
+            var footerItem = footerItems ? footerItems.children[footerIndex] : null
+            if (footerItem && footerItem.tap) footerItem.tap()
+            return
         }
+        layout_footer.currentIndex = -1
+        if (item.onTapListener) item.onTapListener()
+        else if (item instanceof FluPaneItem) item.tap()
     }
     function getItems(){
         return nav_list.model

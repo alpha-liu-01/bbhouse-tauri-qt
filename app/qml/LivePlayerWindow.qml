@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import FluentUI
+import bbhouse
 import "controls"
 
 FluWindow {
@@ -10,7 +11,11 @@ FluWindow {
     height: 700
     minimumWidth: 720
     minimumHeight: 460
+    CompactWindowLimits { id: window_limits; host: window }
     launchMode: FluWindowType.SingleTask
+    Component.onCompleted: window_limits.captureDesktopFloor()
+    onWidthChanged: window_limits.sync()
+    onHeightChanged: window_limits.sync()
     title: LivePlayerController.title || qsTr("直播播放器")
     readonly property bool fullscreenActive: visibility === Window.FullScreen
     property int previousVisibility: Window.Windowed

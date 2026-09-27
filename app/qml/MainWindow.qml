@@ -15,6 +15,11 @@ FluWindow {
     height: 720
     minimumWidth: 880
     minimumHeight: 560
+    CompactWindowLimits {
+        id: window_limits
+        host: window
+        followShrink: true
+    }
     launchMode: FluWindowType.SingleTask
     title: qsTr("BBHouse")
 
@@ -29,6 +34,33 @@ FluWindow {
     QtObject { id: downloads_state; property var value: ({}) }
     QtObject { id: about_state; property var value: ({}) }
     readonly property bool searchVisible: spaceVisible || cardPages.indexOf(currentPage) !== -1
+    readonly property bool compactShell: AppFormFactor.compact
+    onCompactShellChanged: {
+        if (compactShell) return
+        search_box_compact.submit()
+        searchExpanded = false
+        moreOpen = false
+        search_box_mac.restoreFromPage()
+        search_box.restoreFromPage()
+    }
+    property bool searchExpanded: false
+    property bool moreOpen: false
+    readonly property var morePageKeys: ["special", "watchlater", "online", "local", "downloads", "settings", "about"]
+    readonly property bool moreSelected: morePageKeys.indexOf(currentPage) !== -1
+    // 与 FluNavigationView 的模型下标一致，分隔符占第 5 位，页脚在列表末尾。
+    readonly property var navIndexByKey: ({
+        "dynamics": 0,
+        "popular": 1,
+        "bangumi": 2,
+        "live": 3,
+        "special": 4,
+        "watchlater": 6,
+        "online": 7,
+        "local": 8,
+        "downloads": 9,
+        "settings": 10,
+        "about": 11
+    })
     readonly property var activeSearchPage: {
         if (spaceVisible) return space_loader.item
         if (cardPages.indexOf(currentPage) === -1) return null
@@ -36,10 +68,29 @@ FluWindow {
         return loader ? loader.item : null
     }
 
+    function searchEditor() {
+        if (compactShell) return search_box_compact
+        return useSystemAppBar ? search_box_mac : search_box
+    }
     function finishSearch() {
-        var editor = useSystemAppBar ? search_box_mac : search_box
+        var editor = searchEditor()
+        if (!editor) return
         editor.submit()
         editor.focus = false
+    }
+    function expandSearch() {
+        searchExpanded = true
+        search_box_compact.restoreFromPage()
+        search_box_compact.forceActiveFocus()
+    }
+    function openPage(key) {
+        moreOpen = false
+        var index = navIndexByKey[key]
+        if (index === undefined) {
+            visitPage(key)
+            return
+        }
+        nav_view.setCurrentIndex(index)
     }
 
     // 页面只在访问后创建；后台超时同时释放视图和可重建的浏览缓存。
@@ -53,6 +104,8 @@ FluWindow {
         if (pageKeys.indexOf(key) === -1) return
         // 先提交旧页再切换绑定，避免失焦信号晚到时把旧文字写进新页。
         finishSearch()
+        searchExpanded = false
+        moreOpen = false
         // Choose the destination while the space still covers the host; do not
         // briefly recreate an expired previous page when leaving the space.
         currentPage = key
@@ -108,7 +161,9 @@ FluWindow {
         // 稍后登录进入本地媒体库，不创建默认动态页或发出账号请求。
         nav_view.setCurrentIndex(LoginController.needsLogin ? 9 : 0)
         smokeNavigate()
+        window_limits.captureDesktopFloor()
     }
+    onWidthChanged: window_limits.noteHostWidth(width)
 
     appBar: FluAppBar {
         id: app_bar
@@ -125,6 +180,7 @@ FluWindow {
         FluIconButton {
             id: btn_nav_toggle
 
+            visible: !window.compactShell
             width: 38
             height: 38
             anchors {
@@ -146,7 +202,7 @@ FluWindow {
             width: 320
             height: 30
             anchors.centerIn: parent
-            visible: window.searchVisible
+            visible: window.searchVisible && !window.compactShell
             placeholderText: qsTr("搜索标题或 UP 主")
             searchPage: window.activeSearchPage
         }
@@ -164,12 +220,13 @@ FluWindow {
         id: mac_toolbar
 
         width: parent.width
-        height: window.useSystemAppBar ? 44 : 0
-        visible: window.useSystemAppBar
+        height: window.useSystemAppBar && !window.compactShell ? 44 : 0
+        visible: height > 0
 
         FluIconButton {
             id: btn_nav_toggle_mac
 
+            visible: !window.compactShell
             width: 38
             height: 38
             iconSource: FluentIcons.GlobalNavButton
@@ -189,7 +246,7 @@ FluWindow {
             width: 320
             height: 30
             anchors.centerIn: parent
-            visible: window.searchVisible
+            visible: window.searchVisible && !window.compactShell
             placeholderText: qsTr("搜索标题或 UP 主")
             searchPage: window.activeSearchPage
         }
@@ -203,16 +260,20 @@ FluWindow {
         gesturePolicy: TapHandler.DragThreshold
         onPressedChanged: {
             if (!pressed) return
-            var editor = window.useSystemAppBar ? search_box_mac : search_box
-            if (!editor.activeFocus) return
+            var editor = window.searchEditor()
+            if (!editor || !editor.visible || !editor.activeFocus) return
             var local = editor.mapFromItem(parent, point.position.x, point.position.y)
-            if (!editor.contains(local)) window.finishSearch()
+            if (!editor.contains(local)) {
+                window.finishSearch()
+                window.searchExpanded = false
+            }
         }
     }
 
     FluNavigationView {
         id: nav_view
 
+        visible: !window.compactShell
         width: parent.width
         y: mac_toolbar.height
         height: parent.height - mac_toolbar.height
@@ -302,11 +363,12 @@ FluWindow {
         id: page_host
 
         anchors {
-            top: mac_toolbar.bottom
-            bottom: parent.bottom
+            top: compact_search_bar.bottom
+            bottom: bottom_bar.top
             left: parent.left
             right: parent.right
-            leftMargin: window.navExpanded ? nav_view.cellWidth : nav_view.navCompactWidth
+            leftMargin: window.compactShell ? 0
+                    : (window.navExpanded ? nav_view.cellWidth : nav_view.navCompactWidth)
         }
         visible: !window.spaceVisible
         currentIndex: window.pageKeys.indexOf(window.currentPage)
@@ -384,6 +446,191 @@ FluWindow {
         function onDownloadRequested(entry) { download_dialog.showFor(entry) }
         function onErrorChanged() {
             if (DownloadController.error !== "") window.showError(DownloadController.error, 6000)
+        }
+    }
+
+    Item {
+        id: compact_search_bar
+
+        anchors {
+            left: parent.left
+            right: parent.right
+            top: mac_toolbar.bottom
+        }
+        height: window.compactShell && window.searchVisible ? 48 : 0
+        visible: height > 0
+        z: 2
+
+        FluIconButton {
+            visible: !window.searchExpanded
+            width: 44
+            height: 44
+            anchors {
+                left: parent.left
+                leftMargin: 4
+                verticalCenter: parent.verticalCenter
+            }
+            iconSource: FluentIcons.Search
+            iconSize: 16
+            onClicked: window.expandSearch()
+        }
+        PageSearchBox {
+            id: search_box_compact
+
+            visible: window.searchExpanded
+            anchors {
+                fill: parent
+                leftMargin: 8
+                rightMargin: 8
+                topMargin: 6
+                bottomMargin: 6
+            }
+            placeholderText: qsTr("搜索标题或 UP 主")
+            searchPage: window.activeSearchPage
+        }
+    }
+
+    Item {
+        id: bottom_bar
+
+        anchors {
+            left: parent.left
+            right: parent.right
+            bottom: parent.bottom
+        }
+        height: window.compactShell ? 56 : 0
+        visible: height > 0
+        z: 3
+
+        Row {
+            anchors.fill: parent
+            Repeater {
+                model: [
+                    { key: "dynamics", icon: FluentIcons.ReadingList, label: qsTr("动态") },
+                    { key: "popular", icon: FluentIcons.AreaChart, label: qsTr("流行") },
+                    { key: "bangumi", icon: FluentIcons.Movies, label: qsTr("番剧") },
+                    { key: "live", icon: FluentIcons.Webcam, label: qsTr("直播") },
+                    { key: "more", icon: FluentIcons.More, label: qsTr("更多") }
+                ]
+                delegate: Item {
+                    required property var modelData
+                    width: bottom_bar.width / 5
+                    height: bottom_bar.height
+                    readonly property bool selected: modelData.key === "more"
+                            ? window.moreSelected || window.moreOpen
+                            : window.currentPage === modelData.key
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            if (modelData.key === "more") window.moreOpen = !window.moreOpen
+                            else window.openPage(modelData.key)
+                        }
+                    }
+                    Rectangle {
+                        anchors.fill: parent
+                        color: parent.selected ? FluTheme.itemHoverColor : "transparent"
+                    }
+                    Column {
+                        anchors.centerIn: parent
+                        spacing: 2
+                        FluIcon {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            iconSource: modelData.icon
+                            iconSize: 18
+                            iconColor: parent.parent.selected ? FluTheme.primaryColor : FluTheme.fontPrimaryColor
+                        }
+                        FluText {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: modelData.label
+                            font.pixelSize: 11
+                            textColor: parent.parent.selected ? FluTheme.primaryColor : FluTheme.fontSecondaryColor
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Item {
+        id: more_drawer
+
+        visible: window.moreOpen && window.compactShell
+        anchors {
+            left: parent.left
+            right: parent.right
+            top: parent.top
+            bottom: bottom_bar.top
+        }
+        z: 4
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: window.moreOpen = false
+        }
+        Rectangle {
+            anchors {
+                left: parent.left
+                right: parent.right
+                bottom: parent.bottom
+            }
+            height: more_column.implicitHeight + 12
+            color: FluTheme.windowActiveBackgroundColor
+            border.color: FluTheme.dividerColor
+            Column {
+                id: more_column
+                anchors {
+                    left: parent.left
+                    right: parent.right
+                    top: parent.top
+                    margins: 6
+                }
+                spacing: 0
+                Repeater {
+                    model: [
+                        { key: "special", icon: FluentIcons.Pin, label: qsTr("特别关注") },
+                        { key: "watchlater", icon: FluentIcons.Recent, label: qsTr("稍后再看") },
+                        { key: "online", icon: FluentIcons.History, label: qsTr("在线历史") },
+                        { key: "local", icon: FluentIcons.PC1, label: qsTr("本地历史") },
+                        { key: "downloads", icon: FluentIcons.Download, label: qsTr("下载管理") },
+                        { key: "settings", icon: FluentIcons.Settings, label: qsTr("设置") },
+                        { key: "about", icon: FluentIcons.Info, label: qsTr("关于") }
+                    ]
+                    delegate: Item {
+                        required property var modelData
+                        width: more_column.width
+                        height: 44
+                        readonly property bool selected: window.currentPage === modelData.key
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: window.openPage(modelData.key)
+                        }
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 6
+                            color: parent.selected ? FluTheme.itemHoverColor : "transparent"
+                        }
+                        Row {
+                            anchors {
+                                left: parent.left
+                                leftMargin: 12
+                                verticalCenter: parent.verticalCenter
+                            }
+                            spacing: 12
+                            FluIcon {
+                                iconSource: modelData.icon
+                                iconSize: 16
+                                anchors.verticalCenter: parent.verticalCenter
+                                iconColor: parent.parent.selected ? FluTheme.primaryColor : FluTheme.fontPrimaryColor
+                            }
+                            FluText {
+                                text: modelData.label
+                                anchors.verticalCenter: parent.verticalCenter
+                                textColor: parent.parent.selected ? FluTheme.primaryColor : FluTheme.fontPrimaryColor
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

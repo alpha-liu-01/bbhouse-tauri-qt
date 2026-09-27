@@ -8,7 +8,11 @@ FluWindow {
     height: 780
     minimumWidth: 520
     minimumHeight: 600
+    CompactWindowLimits { id: window_limits; host: window }
     launchMode: FluWindowType.SingleTask
+    Component.onCompleted: window_limits.captureDesktopFloor()
+    onWidthChanged: window_limits.sync()
+    onHeightChanged: window_limits.sync()
     title: qsTr("登录")
     Component.onDestruction: LoginController.cancel()
     LoginPage {

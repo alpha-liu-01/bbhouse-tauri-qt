@@ -119,6 +119,7 @@ else()
 endif()
 
 set_source_files_properties(qml/js/Format.js PROPERTIES QT_QML_SKIP_QMLDIR_ENTRY TRUE)
+set_source_files_properties(qml/AppFormFactor.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 # 发布包双击不应弹控制台:显式声明 GUI 子系统(否则 MinGW 默认按 CUI 链接,
 # 只会出现一个黑框且看不到任何 QML 报错,Qt Creator 里则不易察觉)
@@ -130,6 +131,8 @@ qt_add_qml_module(bbhouse-qt
         RESOURCE_PREFIX /qt/qml
         QML_FILES
         qml/Main.qml
+        qml/AppFormFactor.qml
+        qml/CompactWindowLimits.qml
         qml/LoginWindow.qml
         qml/pages/LoginPage.qml
         qml/MainWindow.qml
