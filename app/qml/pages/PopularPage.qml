@@ -185,7 +185,11 @@ FluPage {
                 Accessible.name: qsTr("刷新当前内容")
                 disabled: PopularController.busy
                 onClicked: PopularController.refresh()
-                FluTooltip { text: qsTr("刷新当前内容"); visible: parent.hovered; delay: 500 }
+                FluTooltip {
+                    text: qsTr("刷新当前内容")
+                    visible: parent.hovered || (AppFormFactor.coarsePointer && parent.pressed)
+                    delay: parent.pressed ? 0 : 500
+                }
             }
         }
         RowLayout {
@@ -260,7 +264,11 @@ FluPage {
                 disabled: PopularController.periodsBusy
                 Accessible.name: qsTr("刷新期数目录")
                 onClicked: PopularController.refreshPeriods()
-                FluTooltip { text: qsTr("刷新期数目录"); visible: parent.hovered; delay: 500 }
+                FluTooltip {
+                    text: qsTr("刷新期数目录")
+                    visible: parent.hovered || (AppFormFactor.coarsePointer && parent.pressed)
+                    delay: parent.pressed ? 0 : 500
+                }
             }
         }
         FluText {

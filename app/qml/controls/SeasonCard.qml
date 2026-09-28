@@ -1,5 +1,6 @@
 import QtQuick
 import FluentUI
+import bbhouse
 import "../js/Format.js" as Format
 
 // 竖版封面卡片(bangumi-ui 卡片视觉契约,为本页重新实现,不复用横版 HistoryCard):
@@ -49,11 +50,21 @@ Item {
     MouseArea {
         id: card_mouse
 
+        property bool suppressClick: false
         anchors.fill: parent
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         cursorShape: Qt.PointingHandCursor
+        onPressAndHold: {
+            if (!AppFormFactor.coarsePointer) return
+            suppressClick = true
+            card_root.detailRequested(card_root.cardItem)
+        }
         onClicked: function (mouse) {
+            if (suppressClick) {
+                suppressClick = false
+                return
+            }
             if (mouse.button === Qt.RightButton) {
                 card_root.detailRequested(card_root.cardItem)
             } else {

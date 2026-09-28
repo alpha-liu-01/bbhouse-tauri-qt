@@ -22,6 +22,7 @@ FluTheme::FluTheme(QObject *parent) : QObject{parent} {
     _systemDark = systemDark();
     _desktopImagePath = "";
     _blurBehindWindowEnabled = false;
+    _slimScrollBar = false;
     QGuiApplication::instance()->installEventFilter(this);
     refreshColors();
     connect(this, &FluTheme::darkModeChanged, this, [=] { Q_EMIT darkChanged(); });

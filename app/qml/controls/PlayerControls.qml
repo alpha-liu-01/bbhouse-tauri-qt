@@ -1,23 +1,59 @@
 import QtQuick
 import QtQuick.Controls
 import FluentUI
+import bbhouse
 
 // 仅负责呈现和转发动作；保持 PlayerController 作为实际播放状态的唯一来源。
 FocusScope {
     id: controls
     property var controller: PlayerController
     property bool fullscreen: false
+    property bool portrait: false
     property bool playlistExpanded: false
+    property Item externalSubtitleTrigger: null
+    property Item externalEpisodeTrigger: null
+    property Item overflowTrigger: null
     property real popupMaxHeight: 360
+    property real overflowMaxHeight: 420
     readonly property color accent: "#ff4d4f"
-    readonly property bool compact: width < 810
     readonly property bool hasNext: controller.currentIndex >= 0
                                    && controller.currentIndex + 1 < controller.playlist.length
-    readonly property bool menuOpen: quality_menu.visible || speed_menu.visible || episode_menu.visible || subtitle_menu.visible
+    readonly property var overflowEntries: {
+        var rows = []
+        rows.push({ kind: "header", label: qsTr("播放速度") })
+        var speeds = [0.5, 0.75, 1, 1.25, 1.5, 2, 3]
+        for (var i = 0; i < speeds.length; ++i)
+            rows.push({ kind: "speed", speed: speeds[i], label: speeds[i] + "×" })
+        rows.push({ kind: "keep", label: qsTr("保持播放速度") })
+        if (controller.localMedia !== true) {
+            rows.push({ kind: "header", label: qsTr("清晰度") })
+            var qualities = controller.qualities
+            if (!qualities || qualities.length === 0)
+                rows.push({ kind: "empty", label: qsTr("暂无可用清晰度") })
+            else {
+                for (var q = 0; q < qualities.length; ++q) {
+                    var item = qualities[q]
+                    rows.push({
+                        kind: "quality",
+                        qn: item.qn,
+                        available: item.available,
+                        label: String(item.label || "") + (item.needVip ? qsTr(" 会员") : "")
+                    })
+                }
+            }
+            rows.push({ kind: "header", label: qsTr("编码") })
+            var codecs = [{ codec: "avc", label: "H.264" }, { codec: "hev1", label: "H.265" }, { codec: "av1", label: "AV1" }]
+            for (var c = 0; c < codecs.length; ++c)
+                rows.push({ kind: "codec", codec: codecs[c].codec, label: codecs[c].label })
+        }
+        return rows
+    }
+    readonly property bool menuOpen: quality_menu.visible || speed_menu.visible || episode_menu.visible
+                                     || subtitle_menu.visible || overflow_menu.visible
     readonly property bool interacting: menuOpen || seek.pressed || volume_slider.pressed
                                        || control_hover.hovered || activeFocus
     property int lastAudibleVolume: 100
-    implicitHeight: compact ? 114 : 74
+    implicitHeight: extra_host.visible ? 80 : 40
     signal activity()
     signal actionTriggered()
     signal fullscreenRequested()
@@ -46,6 +82,20 @@ FocusScope {
         speed_menu.close()
         episode_menu.close()
         subtitle_menu.close()
+        overflow_menu.close()
+    }
+    function openSubtitleMenu() {
+        activity()
+        subtitle_menu.open()
+    }
+    function openEpisodeMenu() {
+        activity()
+        episode_menu.open()
+        episode_list.positionViewAtIndex(Math.max(0, controller.currentIndex), ListView.Contain)
+    }
+    function openOverflowMenu() {
+        activity()
+        overflow_menu.open()
     }
     onInteractingChanged: activity()
     HoverHandler {
@@ -112,10 +162,159 @@ FocusScope {
         }
     }
 
+    Item {
+        id: extra_host
+        visible: !controls.portrait
+        anchors { left: parent.left; right: parent.right; top: parent.top }
+        height: visible ? 40 : 0
+        clip: true
+        Row {
+            anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+            spacing: 2
+            PlayerControlButton {
+                visible: controls.hasNext
+                iconSource: FluentIcons.Next
+                contentDescription: qsTr("下一个（Shift+N）")
+                onClicked: { controls.controller.playNext(); controls.actionTriggered() }
+            }
+            Item {
+                id: volume_group
+                width: volume_button.width + volume_slider.width
+                height: 36
+                readonly property bool expanded: AppFormFactor.coarsePointer || volume_hover.hovered
+                                                 || volume_slider.pressed || volume_slider.activeFocus
+                                                 || volume_button.activeFocus
+                HoverHandler { id: volume_hover }
+                PlayerControlButton {
+                    id: volume_button
+                    objectName: "playerMuteButton"
+                    iconSource: controls.controller.volumePercent > 0 ? FluentIcons.Volume : FluentIcons.Mute
+                    contentDescription: controls.controller.volumePercent > 0 ? qsTr("静音（M）") : qsTr("取消静音（M）")
+                    onClicked: { controls.toggleMute(); controls.actionTriggered() }
+                }
+                FluSlider {
+                    id: volume_slider
+                    anchors { left: volume_button.right; verticalCenter: parent.verticalCenter }
+                    width: volume_group.expanded ? 86 : 0
+                    height: 28
+                    visible: width > 0
+                    enabled: volume_group.expanded
+                    tooltipEnabled: false
+                    padding: 6
+                    from: 0; to: 100; stepSize: 1
+                    focusPolicy: Qt.TabFocus
+                    Accessible.name: qsTr("音量")
+                    Binding {
+                        target: volume_slider; property: "value"
+                        value: controls.controller.volumePercent
+                        when: !volume_slider.pressed
+                        restoreMode: Binding.RestoreNone
+                    }
+                    Behavior on width { NumberAnimation { duration: 180 } }
+                    onMoved: { controls.controller.setVolumePercent(Math.round(value)); controls.activity() }
+                    background: Rectangle {
+                        x: volume_slider.leftPadding + 5
+                        y: (volume_slider.height - height) / 2
+                        width: Math.max(0, volume_slider.availableWidth - 10)
+                        height: 3; radius: 2
+                        color: "#40ffffff"
+                        Rectangle { width: volume_slider.position * parent.width; height: 3; radius: 2; color: "white" }
+                    }
+                    handle: Rectangle {
+                        width: 10; height: 10; radius: 5; color: "white"
+                        x: volume_slider.leftPadding + volume_slider.visualPosition * (volume_slider.availableWidth - width)
+                        y: (volume_slider.height - height) / 2
+                    }
+                }
+            }
+            PlayerControlButton {
+                id: subtitle_button
+                objectName: "playerSubtitleButton"
+                iconSource: FluentIcons.ClosedCaptionsInternational
+                contentDescription: qsTr("CC 字幕（S）")
+                active: controls.controller.selectedSubtitle >= 0
+                onClicked: { controls.activity(); subtitle_menu.open() }
+            }
+            PlayerControlButton {
+                caption: qsTr("弹")
+                contentDescription: qsTr("弹幕（D）")
+                active: controls.controller.danmakuOn
+                onClicked: { controls.controller.toggleDanmaku(); controls.actionTriggered() }
+                Rectangle {
+                    anchors { bottom: parent.bottom; bottomMargin: 3; horizontalCenter: parent.horizontalCenter }
+                    width: 4; height: 4; radius: 2
+                    color: controls.accent
+                    visible: controls.controller.danmakuOn
+                }
+            }
+            PlayerControlButton {
+                id: speed_button
+                caption: (controls.controller.speed === 1 ? "1.0" : String(controls.controller.speed)) + "×"
+                contentDescription: qsTr("播放速度")
+                onClicked: { controls.activity(); speed_menu.open() }
+            }
+            PlayerControlButton {
+                id: quality_button
+                visible: controls.controller.localMedia !== true
+                width: Math.min(110, Math.max(64, implicitContentWidth + 20))
+                caption: controls.controller.qualityLabel || qsTr("清晰度")
+                contentDescription: qsTr("清晰度与编码")
+                onClicked: { controls.activity(); quality_menu.open() }
+            }
+            PlayerControlButton {
+                id: episode_button
+                visible: controls.controller.seasonMode
+                caption: qsTr("选集")
+                contentDescription: qsTr("选择分集")
+                onClicked: {
+                    controls.activity()
+                    episode_menu.open()
+                    episode_list.positionViewAtIndex(Math.max(0, controls.controller.currentIndex), ListView.Contain)
+                }
+            }
+            PlayerControlButton {
+                visible: !controls.controller.seasonMode
+                iconSource: FluentIcons.List
+                active: controls.playlistExpanded
+                contentDescription: qsTr("播放列表")
+                onClicked: { controls.playlistRequested(); controls.actionTriggered() }
+            }
+        }
+    }
+
+    Item {
+        id: transport_row
+        anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+        height: 40
+        PlayerControlButton {
+            id: play_button
+            anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+            objectName: "playerPlayButton"
+            iconSource: controls.controller.paused ? FluentIcons.Play : FluentIcons.Pause
+            contentDescription: controls.controller.paused ? qsTr("播放（空格）") : qsTr("暂停（空格）")
+            enabled: controls.controller.kernelAvailable && controls.controller.currentIndex >= 0
+            onClicked: { controls.controller.togglePlayPause(); controls.actionTriggered() }
+        }
+        PlayerControlButton {
+            id: fullscreen_button
+            anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+            iconSource: controls.fullscreen ? FluentIcons.BackToWindow : FluentIcons.FullScreen
+            contentDescription: controls.fullscreen ? qsTr("退出全屏（F）") : qsTr("全屏（F）")
+            onClicked: { controls.fullscreenRequested(); controls.actionTriggered() }
+        }
+        FluText {
+            id: time_label
+            anchors { right: fullscreen_button.left; rightMargin: 8; verticalCenter: parent.verticalCenter }
+            font.pixelSize: 12
+            color: "#eeeeee"
+            text: controls.formatTime(seek.pressed ? seek.scrubValue : controls.controller.position)
+                  + " / " + controls.formatTime(controls.controller.duration)
+        }
     FluSlider {
         id: seek
         objectName: "playerSeekSlider"
-        anchors { left: parent.left; right: parent.right; top: parent.top }
+        anchors { left: play_button.right; right: time_label.left; leftMargin: 8; rightMargin: 8
+            verticalCenter: parent.verticalCenter }
         height: 24
         padding: 6
         from: 0
@@ -190,7 +389,7 @@ FocusScope {
             x: seek.leftPadding + seek.visualPosition * (seek.availableWidth - width)
             y: (seek.height - height) / 2
             color: controls.accent
-            scale: seek.hovered || seek.pressed || seek.activeFocus ? 1 : 0
+            scale: seek.hovered || seek.pressed || seek.activeFocus || AppFormFactor.coarsePointer ? 1 : 0
             Behavior on scale { NumberAnimation { duration: 120 } }
         }
         Rectangle {
@@ -211,156 +410,18 @@ FocusScope {
             }
         }
     }
+    }
     Timer {
         id: seek_throttle
         interval: 200
         onTriggered: if (seek.pressed && seek.enabled) controls.controller.seek(seek.scrubValue)
     }
 
-    Row {
-        id: left_controls
-        anchors { left: parent.left; bottom: parent.bottom }
-        height: 40
-        spacing: 2
-        PlayerControlButton {
-            objectName: "playerPlayButton"
-            iconSource: controls.controller.paused ? FluentIcons.Play : FluentIcons.Pause
-            contentDescription: controls.controller.paused ? qsTr("播放（空格）") : qsTr("暂停（空格）")
-            enabled: controls.controller.kernelAvailable && controls.controller.currentIndex >= 0
-            onClicked: { controls.controller.togglePlayPause(); controls.actionTriggered() }
-        }
-        PlayerControlButton {
-            visible: controls.hasNext
-            iconSource: FluentIcons.Next
-            contentDescription: qsTr("下一个（Shift+N）")
-            onClicked: { controls.controller.playNext(); controls.actionTriggered() }
-        }
-        Item {
-            id: volume_group
-            width: volume_button.width + volume_slider.width
-            height: 36
-            readonly property bool expanded: volume_hover.hovered || volume_slider.pressed
-                                             || volume_slider.activeFocus || volume_button.activeFocus
-            HoverHandler { id: volume_hover }
-            PlayerControlButton {
-                id: volume_button
-                objectName: "playerMuteButton"
-                iconSource: controls.controller.volumePercent > 0 ? FluentIcons.Volume : FluentIcons.Mute
-                contentDescription: controls.controller.volumePercent > 0 ? qsTr("静音（M）") : qsTr("取消静音（M）")
-                onClicked: { controls.toggleMute(); controls.actionTriggered() }
-            }
-            FluSlider {
-                id: volume_slider
-                anchors { left: volume_button.right; verticalCenter: parent.verticalCenter }
-                width: volume_group.expanded ? 86 : 0
-                height: 28
-                visible: width > 0
-                enabled: volume_group.expanded
-                tooltipEnabled: false
-                padding: 6
-                from: 0; to: 100; stepSize: 1
-                focusPolicy: Qt.TabFocus
-                Accessible.name: qsTr("音量")
-                Binding {
-                    target: volume_slider; property: "value"
-                    value: controls.controller.volumePercent
-                    when: !volume_slider.pressed
-                    restoreMode: Binding.RestoreNone
-                }
-                Behavior on width { NumberAnimation { duration: 180 } }
-                onMoved: { controls.controller.setVolumePercent(Math.round(value)); controls.activity() }
-                background: Rectangle {
-                    x: volume_slider.leftPadding + 5
-                    y: (volume_slider.height - height) / 2
-                    width: Math.max(0, volume_slider.availableWidth - 10)
-                    height: 3; radius: 2
-                    color: "#40ffffff"
-                    Rectangle { width: volume_slider.position * parent.width; height: 3; radius: 2; color: "white" }
-                }
-                handle: Rectangle {
-                    width: 10; height: 10; radius: 5; color: "white"
-                    x: volume_slider.leftPadding + volume_slider.visualPosition * (volume_slider.availableWidth - width)
-                    y: (volume_slider.height - height) / 2
-                }
-            }
-        }
-        FluText {
-            anchors.verticalCenter: parent.verticalCenter
-            leftPadding: 8
-            font.pixelSize: 12
-            color: "#eeeeee"
-            text: controls.formatTime(seek.pressed ? seek.scrubValue : controls.controller.position)
-                  + " / " + controls.formatTime(controls.controller.duration)
-        }
-    }
-    Row {
-        id: right_controls
-        anchors { right: parent.right; bottom: parent.bottom; bottomMargin: controls.compact ? 40 : 0 }
-        height: 40
-        spacing: 2
-        PlayerControlButton {
-            id: subtitle_button
-            objectName: "playerSubtitleButton"
-            iconSource: FluentIcons.ClosedCaptionsInternational
-            contentDescription: qsTr("CC 字幕（S）")
-            active: controls.controller.selectedSubtitle >= 0
-            onClicked: { controls.activity(); subtitle_menu.open() }
-        }
-        PlayerControlButton {
-            caption: qsTr("弹")
-            contentDescription: qsTr("弹幕（D）")
-            active: controls.controller.danmakuOn
-            onClicked: { controls.controller.toggleDanmaku(); controls.actionTriggered() }
-            Rectangle {
-                anchors { bottom: parent.bottom; bottomMargin: 3; horizontalCenter: parent.horizontalCenter }
-                width: 4; height: 4; radius: 2
-                color: controls.accent
-                visible: controls.controller.danmakuOn
-            }
-        }
-        PlayerControlButton {
-            id: speed_button
-            caption: (controls.controller.speed === 1 ? "1.0" : String(controls.controller.speed)) + "×"
-            contentDescription: qsTr("播放速度")
-            onClicked: { controls.activity(); speed_menu.open() }
-        }
-        PlayerControlButton {
-            id: quality_button
-            visible: controls.controller.localMedia !== true
-            width: Math.min(110, Math.max(64, implicitContentWidth + 20))
-            caption: controls.controller.qualityLabel || qsTr("清晰度")
-            contentDescription: qsTr("清晰度与编码")
-            onClicked: { controls.activity(); quality_menu.open() }
-        }
-        PlayerControlButton {
-            id: episode_button
-            visible: controls.controller.seasonMode
-            caption: qsTr("选集")
-            contentDescription: qsTr("选择分集")
-            onClicked: {
-                controls.activity()
-                episode_menu.open()
-                episode_list.positionViewAtIndex(Math.max(0, controls.controller.currentIndex), ListView.Contain)
-            }
-        }
-        PlayerControlButton {
-            visible: !controls.controller.seasonMode
-            iconSource: FluentIcons.List
-            active: controls.playlistExpanded
-            contentDescription: qsTr("播放列表")
-            onClicked: { controls.playlistRequested(); controls.actionTriggered() }
-        }
-        PlayerControlButton {
-            iconSource: controls.fullscreen ? FluentIcons.BackToWindow : FluentIcons.FullScreen
-            contentDescription: controls.fullscreen ? qsTr("退出全屏（F）") : qsTr("全屏（F）")
-            onClicked: { controls.fullscreenRequested(); controls.actionTriggered() }
-        }
-    }
-
     DarkMenu {
         id: subtitle_menu
         objectName: "playerSubtitleMenu"
-        trigger: subtitle_button
+        trigger: controls.portrait && controls.externalSubtitleTrigger
+                 ? controls.externalSubtitleTrigger : subtitle_button
         width: Math.min(300, controls.width)
         DarkMenuItem {
             objectName: "playerSubtitleOff"
@@ -447,7 +508,8 @@ FocusScope {
     DarkMenu {
         id: episode_menu
         objectName: "playerEpisodeMenu"
-        trigger: episode_button
+        trigger: controls.portrait && controls.externalEpisodeTrigger
+                 ? controls.externalEpisodeTrigger : episode_button
         width: Math.min(320, controls.width)
         contentItem: ListView {
             id: episode_list
@@ -494,6 +556,45 @@ FocusScope {
             episode_list.currentIndex = controls.controller.currentIndex
             episode_list.forceActiveFocus()
             controls.activity()
+        }
+    }
+    DarkMenu {
+        id: overflow_menu
+        objectName: "playerOverflowMenu"
+        trigger: controls.overflowTrigger
+        width: Math.min(280, Math.max(190, controls.width))
+        x: trigger ? Math.max(0, Math.min(controls.width - width, trigger.mapToItem(controls, trigger.width, 0).x - width)) : 0
+        y: trigger ? trigger.mapToItem(controls, 0, trigger.height).y + 8 : 0
+        height: Math.min(Math.max(36, overflow_list.count * 36 + 12), Math.max(180, controls.overflowMaxHeight))
+        contentItem: ListView {
+            id: overflow_list
+            clip: true
+            model: controls.overflowEntries
+            implicitHeight: contentHeight
+            interactive: contentHeight > height
+            ScrollBar.vertical: FluScrollBar {}
+            delegate: DarkMenuItem {
+                required property int index
+                required property var modelData
+                width: overflow_list.width
+                height: 36
+                text: modelData.label
+                enabled: modelData.kind !== "header" && modelData.kind !== "empty"
+                         && (modelData.kind !== "quality" || modelData.available)
+                checkable: modelData.kind === "speed" || modelData.kind === "keep"
+                           || modelData.kind === "quality" || modelData.kind === "codec"
+                checked: modelData.kind === "speed" ? Math.abs(modelData.speed - controls.controller.speed) < 0.001
+                        : modelData.kind === "keep" ? controls.controller.keepSpeed
+                        : modelData.kind === "quality" ? modelData.qn === controls.controller.currentQn
+                        : modelData.kind === "codec" ? modelData.codec === controls.controller.preferCodec
+                        : false
+                onTriggered: {
+                    if (modelData.kind === "speed") controls.controller.setSpeed(modelData.speed)
+                    else if (modelData.kind === "keep") controls.controller.setKeepSpeed(!controls.controller.keepSpeed)
+                    else if (modelData.kind === "quality") controls.controller.setQuality(modelData.qn)
+                    else if (modelData.kind === "codec") controls.controller.setPreferCodec(modelData.codec)
+                }
+            }
         }
     }
 }

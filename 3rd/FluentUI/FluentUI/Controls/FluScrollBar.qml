@@ -14,12 +14,13 @@ T.ScrollBar {
     implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset,
                              implicitContentHeight + topPadding + bottomPadding)
 
-    visible: control.policy !== T.ScrollBar.AlwaysOff
+    visible: FluTheme.slimScrollBar ? (control.active && control.size < 1.0)
+                                    : control.policy !== T.ScrollBar.AlwaysOff
     minimumSize: Math.max(orientation === Qt.Horizontal ? height / width : width / height,0.3)
     QtObject{
         id:d
         property int  minLine : 2
-        property int  maxLine : 6
+        property int  maxLine : FluTheme.slimScrollBar ? 3 : 6
     }
     z: horizontal? 10 : 20
     verticalPadding : vertical ? 15 : 3

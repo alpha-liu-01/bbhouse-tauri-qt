@@ -91,7 +91,8 @@ Item {
     Timer {
         id: cursor_timer
         interval: 5000
-        onTriggered: if (!view.controlsLocked && video_click.containsMouse) view.cursorHidden = true
+        onTriggered: if (!AppFormFactor.coarsePointer && !view.controlsLocked && video_click.containsMouse)
+                         view.cursorHidden = true
     }
     Connections {
         target: LivePlayerController
@@ -142,10 +143,20 @@ Item {
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: view.cursorHidden ? Qt.BlankCursor : Qt.ArrowCursor
-            onClicked: view.finishAction()
+            onClicked: {
+                if (!AppFormFactor.coarsePointer) {
+                    view.finishAction()
+                    return
+                }
+                if (!view.controlsShown) view.pokeControls()
+                else {
+                    LivePlayerController.togglePlayPause()
+                    view.pokeControls()
+                }
+            }
             onDoubleClicked: view.toggleFullscreen()
-            onPositionChanged: view.pokeControls()
-            onExited: view.scheduleQuickHide()
+            onPositionChanged: if (!AppFormFactor.coarsePointer) view.pokeControls()
+            onExited: if (!AppFormFactor.coarsePointer) view.scheduleQuickHide()
         }
         Column {
             z: 2

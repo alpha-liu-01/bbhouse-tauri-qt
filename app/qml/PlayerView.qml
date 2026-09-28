@@ -14,9 +14,10 @@ Item {
 
     readonly property bool offscreen: Qt.platform.pluginName === "offscreen"
     property bool panelExpanded: true
-    readonly property int panelWidth: PlayerController.seasonMode ? 0
-                                                                  : (panelExpanded ? 300 : 0)
     readonly property bool fullscreenActive: host && host.visibility === Window.FullScreen
+    readonly property bool portraitLayout: height > width && !fullscreenActive
+    readonly property int panelWidth: portraitLayout || PlayerController.seasonMode || !panelExpanded ? 0
+                                                                  : 300
     onFullscreenActiveChanged: {
         panelExpanded = false
         pokeControls()
@@ -24,14 +25,17 @@ Item {
     property int prevVisibility: Window.Windowed
     property int prevAppBarHeight: 48
     property bool controlsShown: true
-    readonly property bool cursorHidden: !controlsShown && !controlsLocked && video_click.containsMouse
+    property bool touchPlayGuard: false
+    readonly property bool cursorHidden: !AppFormFactor.coarsePointer && !controlsShown
+                                         && !controlsLocked && video_click.containsMouse
     readonly property bool controlsLocked: playback_controls.interacting || top_hover.hovered
                                           || top_bar.activeFocus || entitlement_dialog.visible || download_dialog.visible
                                           || PlayerController.paused || PlayerController.loading
                                           || PlayerController.buffering
     onControlsLockedChanged: {
+        if (touchPlayGuard) return
         pokeControls()
-        if (!controlsLocked && !video_click.containsMouse) scheduleQuickHide()
+        if (!controlsLocked && !AppFormFactor.coarsePointer && !video_click.containsMouse) scheduleQuickHide()
     }
     onWidthChanged: if (width < 1080) panelExpanded = false
 
@@ -45,6 +49,15 @@ Item {
         controlsShown = true
         quick_hide.stop()
         hide_timer.restart()
+    }
+    function toggleControls() {
+        if (controlsShown) {
+            hide_timer.stop()
+            quick_hide.stop()
+            controlsShown = false
+        } else {
+            pokeControls()
+        }
     }
     function scheduleQuickHide() {
         if (!controlsLocked) {
@@ -131,6 +144,11 @@ Item {
         anchors.fill: parent
         focus: true
 
+        Rectangle {
+            anchors.fill: parent
+            color: "#101010"
+        }
+
         // 键盘快捷键:焦点不在消费按键的控件(列表/按钮)时生效
         // (事件自焦点控件沿父链冒泡,列表导航/按钮空格先行消费,天然不抢占)
         Keys.onPressed: function (event) {
@@ -195,11 +213,11 @@ Item {
 
             anchors {
                 top: parent.top
-                bottom: parent.bottom
                 left: parent.left
                 right: parent.right
                 rightMargin: view.panelWidth
             }
+            height: view.portraitLayout ? Math.round(width * 9 / 16) : parent.height
             clip: true
 
             Rectangle {
@@ -242,25 +260,150 @@ Item {
             }
         }
 
-        // 画面点击:切换播放/暂停 + 呼出控制栏;指针移动重置自动隐藏计时
+        // 鼠标单击仍是暂停并呼出控制栏。触摸单击只切换控制栏，双击只切换播放。
         MouseArea {
             id: video_click
 
+            property bool volumeDrag: false
+            property bool seekDrag: false
+            property bool suppressClick: false
+            property bool touchPress: false
+            property bool menuWasOpen: false
+            property real lastTapMs: 0
+            property real pressX: 0
+            property real pressY: 0
+            property int pressVolume: 0
+            property real pressPosition: 0
+            property real seekTarget: 0
             z: 2
             anchors.fill: video_holder
             hoverEnabled: true
             cursorShape: view.cursorHidden ? Qt.BlankCursor : Qt.ArrowCursor
             onEntered: view.pokeControls()
-            onClicked: {
+            onPressed: function(mouse) {
+                volumeDrag = false
+                seekDrag = false
+                suppressClick = false
+                touchPress = mouse.source !== Qt.MouseEventNotSynthesized
+                menuWasOpen = playback_controls.menuOpen
+                pressX = mouse.x
+                pressY = mouse.y
+                pressVolume = PlayerController.volumePercent
+                pressPosition = PlayerController.position
+                seekTarget = pressPosition
+            }
+            onReleased: function(mouse) {
+                if (!seekDrag) return
+                var duration = PlayerController.duration
+                var target = Math.max(0, Math.min(duration, seekTarget))
+                seekDrag = false
+                PlayerController.seek(target)
+                seek_hint_timer.restart()
+            }
+            onClicked: function(mouse) {
+                if (suppressClick || volumeDrag || seekDrag) {
+                    suppressClick = false
+                    return
+                }
+                var touch = mouse.source !== Qt.MouseEventNotSynthesized
+                if (touch) {
+                    var now = Date.now()
+                    var interval = Qt.styleHints.mouseDoubleClickInterval
+                    if (lastTapMs > 0 && now - lastTapMs < interval) {
+                        lastTapMs = 0
+                        tap_timer.stop()
+                        view.touchPlayGuard = true
+                        PlayerController.togglePlayPause()
+                        view.touchPlayGuard = false
+                        root.forceActiveFocus()
+                        return
+                    }
+                    lastTapMs = now
+                    if (menuWasOpen) {
+                        root.forceActiveFocus()
+                        return
+                    }
+                    tap_timer.restart()
+                    return
+                }
                 PlayerController.togglePlayPause()
                 root.forceActiveFocus()
                 view.pokeControls()
             }
-            onPositionChanged: {
-                view.pokeControls()
+            onPositionChanged: function(mouse) {
+                if (!pressed) {
+                    if (!AppFormFactor.coarsePointer) view.pokeControls()
+                    return
+                }
+                var dx = mouse.x - pressX
+                var dy = pressY - mouse.y
+                var adx = Math.abs(dx)
+                var ady = Math.abs(dy)
+                if (!volumeDrag && !seekDrag && (adx > 12 || ady > 12)) {
+                    if (ady > 12 && ady >= adx && view.portraitLayout && pressX >= width / 2)
+                        volumeDrag = true
+                    else if (adx > 12 && adx > ady && touchPress
+                             && PlayerController.seekable && PlayerController.duration > 0)
+                        seekDrag = true
+                    if (volumeDrag || seekDrag) {
+                        suppressClick = true
+                        lastTapMs = 0
+                        tap_timer.stop()
+                    }
+                }
+                if (volumeDrag) {
+                    var next = pressVolume + dy / Math.max(1, height) * 100
+                    PlayerController.setVolumePercent(Math.max(0, Math.min(100, Math.round(next))))
+                    volume_hint_timer.restart()
+                    return
+                }
+                if (seekDrag) {
+                    var span = Math.min(60, PlayerController.duration)
+                    seekTarget = Math.max(0, Math.min(PlayerController.duration,
+                            pressPosition + dx / Math.max(1, width) * span))
+                    seek_hint_timer.restart()
+                    return
+                }
+                if (!AppFormFactor.coarsePointer) view.pokeControls()
             }
             onExited: {
-                view.scheduleQuickHide()
+                if (!AppFormFactor.coarsePointer) view.scheduleQuickHide()
+            }
+        }
+        Rectangle {
+            z: 6
+            anchors.centerIn: video_holder
+            width: gesture_hint.implicitWidth + 28
+            height: gesture_hint.implicitHeight + 16
+            radius: 8
+            color: "#cc202020"
+            visible: (volume_hint_timer.running && view.portraitLayout && !video_click.seekDrag)
+                     || video_click.seekDrag || seek_hint_timer.running
+            FluText {
+                id: gesture_hint
+                anchors.centerIn: parent
+                color: "white"
+                text: video_click.volumeDrag
+                      || (volume_hint_timer.running && !video_click.seekDrag && !seek_hint_timer.running)
+                      ? qsTr("音量 %1%").arg(PlayerController.volumePercent)
+                      : playback_controls.formatTime(video_click.seekTarget)
+                        + " / " + playback_controls.formatTime(PlayerController.duration)
+            }
+        }
+        Timer {
+            id: volume_hint_timer
+            interval: 700
+        }
+        Timer {
+            id: seek_hint_timer
+            interval: 700
+        }
+        Timer {
+            id: tap_timer
+            interval: Qt.styleHints.mouseDoubleClickInterval
+            onTriggered: {
+                video_click.lastTapMs = 0
+                view.toggleControls()
             }
         }
 
@@ -351,6 +494,13 @@ Item {
                         }
                     }
                     PlayerControlButton {
+                        id: overflow_button
+                        visible: view.portraitLayout
+                        iconSource: FluentIcons.More
+                        contentDescription: qsTr("倍速和画质")
+                        onClicked: { playback_controls.openOverflowMenu(); view.pokeControls() }
+                    }
+                    PlayerControlButton {
                         iconSource: FluentIcons.Camera
                         contentDescription: qsTr("截图")
                         onClicked: { PlayerController.screenshot(); root.forceActiveFocus(); view.pokeControls() }
@@ -378,6 +528,11 @@ Item {
                     leftMargin: 16; rightMargin: 16; bottomMargin: 8 }
                 height: implicitHeight
                 fullscreen: view.fullscreenActive
+                portrait: view.portraitLayout
+                overflowTrigger: overflow_button
+                overflowMaxHeight: Math.max(180, root.height - 96)
+                externalSubtitleTrigger: below_subtitle
+                externalEpisodeTrigger: below_episode
                 playlistExpanded: view.panelExpanded
                 popupMaxHeight: Math.max(120, Math.min(360, video_holder.height - height - 84))
                 onActivity: view.pokeControls()
@@ -387,20 +542,69 @@ Item {
             }
         }
 
+        Item {
+            id: below_bar
+            visible: view.portraitLayout
+            height: visible ? 48 : 0
+            anchors {
+                top: video_holder.bottom
+                left: parent.left
+                right: parent.right
+            }
+            Row {
+                anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
+                spacing: 4
+                PlayerControlButton {
+                    caption: qsTr("弹")
+                    contentDescription: qsTr("弹幕（D）")
+                    active: PlayerController.danmakuOn
+                    onClicked: PlayerController.toggleDanmaku()
+                }
+                PlayerControlButton {
+                    id: below_subtitle
+                    iconSource: FluentIcons.ClosedCaptionsInternational
+                    contentDescription: qsTr("CC 字幕（S）")
+                    active: PlayerController.selectedSubtitle >= 0
+                    onClicked: playback_controls.openSubtitleMenu()
+                }
+                PlayerControlButton {
+                    id: below_episode
+                    visible: PlayerController.seasonMode
+                    caption: qsTr("选集")
+                    contentDescription: qsTr("选择分集")
+                    onClicked: playback_controls.openEpisodeMenu()
+                }
+                PlayerControlButton {
+                    visible: !PlayerController.seasonMode
+                    iconSource: FluentIcons.List
+                    active: view.panelExpanded
+                    contentDescription: qsTr("播放列表")
+                    onClicked: view.panelExpanded = !view.panelExpanded
+                }
+                PlayerControlButton {
+                    visible: playback_controls.hasNext
+                    iconSource: FluentIcons.Next
+                    contentDescription: qsTr("下一个（Shift+N）")
+                    onClicked: PlayerController.playNext()
+                }
+            }
+        }
+
         // 右侧会话播放列表，折叠后不占用画面宽度。
         // 番剧剧集模式下整体隐藏(playlist 即分集表,选集走底部菜单)
         Rectangle {
             id: playlist_panel
 
             z: 5
-            visible: !PlayerController.seasonMode && width > 0
+            visible: !PlayerController.seasonMode && (view.portraitLayout ? view.panelExpanded : width > 0)
             enabled: view.panelExpanded && !PlayerController.seasonMode
             clip: true
-            width: view.panelWidth
+            width: view.portraitLayout ? parent.width : view.panelWidth
             anchors {
-                top: parent.top
+                top: view.portraitLayout ? below_bar.bottom : parent.top
                 bottom: parent.bottom
-                right: parent.right
+                left: parent.left
+                leftMargin: view.portraitLayout ? 0 : Math.max(0, parent.width - width)
             }
             color: "#181818"
 

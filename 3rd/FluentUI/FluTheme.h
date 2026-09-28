@@ -38,6 +38,7 @@ class FluTheme : public QObject {
     Q_PROPERTY_AUTO(bool, nativeText)
     Q_PROPERTY_AUTO(bool, animationEnabled)
     Q_PROPERTY_AUTO(bool, blurBehindWindowEnabled)
+    Q_PROPERTY_AUTO(bool, slimScrollBar)
     QML_NAMED_ELEMENT(FluTheme)
     QML_SINGLETON
 

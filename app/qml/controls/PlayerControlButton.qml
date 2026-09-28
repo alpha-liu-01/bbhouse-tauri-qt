@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import FluentUI
+import bbhouse
 
 // 视频覆盖层保持深色前景语义，复用 FluentUI 的按钮输入、焦点和 tooltip。
 FluIconButton {
@@ -11,8 +12,9 @@ FluIconButton {
 
     text: caption.length > 0 ? caption : contentDescription
     display: caption.length > 0 ? Button.TextOnly : Button.IconOnly
-    width: caption.length > 0 ? Math.max(48, labelMetrics.width + 20) : 36
-    height: 36
+    readonly property int hitSize: AppFormFactor.coarsePointer ? 44 : 36
+    width: caption.length > 0 ? Math.max(hitSize, labelMetrics.width + 20) : hitSize
+    height: hitSize
     radius: 18
     iconSize: 20
     font.pixelSize: 13

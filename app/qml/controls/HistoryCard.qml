@@ -200,12 +200,22 @@ Item {
     MouseArea {
         id: card_mouse
 
+        property bool suppressClick: false
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         cursorShape: card_root.playable ||
                      (!card_root.videoEntry && !card_root.dynamicUnavailable &&
                       card_root.linkUrl !== "") ? Qt.PointingHandCursor : Qt.ArrowCursor
+        onPressAndHold: {
+            if (!AppFormFactor.coarsePointer) return
+            suppressClick = true
+            card_root.openContextMenu()
+        }
         onClicked: function (mouse) {
+            if (suppressClick) {
+                suppressClick = false
+                return
+            }
             if (mouse.button === Qt.RightButton) {
                 card_root.openContextMenu()
             } else if (card_root.playable) {

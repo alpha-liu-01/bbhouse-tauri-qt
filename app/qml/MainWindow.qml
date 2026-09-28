@@ -189,6 +189,19 @@ FluWindow {
         smokeNavigate()
         window_limits.captureDesktopFloor()
         adoptCompactLogin()
+        syncTouchScreen()
+        try {
+            TouchScreen.availableChanged.connect(syncTouchScreen)
+        } catch (e) {
+        }
+        FluTheme.slimScrollBar = Qt.binding(function() { return AppFormFactor.coarsePointer })
+    }
+    function syncTouchScreen() {
+        try {
+            AppFormFactor.touchScreen = !!TouchScreen.available
+        } catch (e) {
+            AppFormFactor.touchScreen = false
+        }
     }
     Connections {
         target: AppRoutes

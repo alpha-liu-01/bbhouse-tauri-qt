@@ -110,7 +110,11 @@ FluPage {
                 disabled: HistoryController.loading
                 Accessible.name: qsTr("刷新本地历史")
                 onClicked: HistoryController.loadPage(page.pageIndex)
-                FluTooltip { text: qsTr("刷新本地历史"); visible: parent.hovered; delay: 500 }
+                FluTooltip {
+                    text: qsTr("刷新本地历史")
+                    visible: parent.hovered || (AppFormFactor.coarsePointer && parent.pressed)
+                    delay: parent.pressed ? 0 : 500
+                }
             }
         }
     }

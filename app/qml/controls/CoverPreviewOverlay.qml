@@ -1,5 +1,6 @@
 import QtQuick
 import FluentUI
+import bbhouse
 
 // 封面原图预览层(history-browser-ui 封面预览契约):
 // - 全屏遮罩 + 原图(URL 由调用方去掉 '@…' 转码后缀)
@@ -161,9 +162,19 @@ Item {
     MouseArea {
         id: overlay_mouse
 
+        property bool suppressClick: false
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton | Qt.RightButton
+        onPressAndHold: {
+            if (!AppFormFactor.coarsePointer) return
+            suppressClick = true
+            preview_menu.popup()
+        }
         onClicked: function (mouse) {
+            if (suppressClick) {
+                suppressClick = false
+                return
+            }
             if (mouse.button === Qt.RightButton) {
                 preview_menu.popup()
             } else {

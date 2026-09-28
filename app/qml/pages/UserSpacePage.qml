@@ -65,8 +65,8 @@ FluPage {
                 onClicked: page.backRequested()
                 FluTooltip {
                     text: qsTr("返回上一页")
-                    visible: back_button.hovered
-                    delay: 300
+                    visible: back_button.hovered || (AppFormFactor.coarsePointer && back_button.pressed)
+                    delay: back_button.pressed ? 0 : 300
                 }
             }
 
@@ -146,8 +146,8 @@ FluPage {
                         !page.followed)
                 FluTooltip {
                     text: page.followed ? qsTr("取消特别关注") : qsTr("添加到本地特别关注")
-                    visible: follow_button.hovered
-                    delay: 300
+                    visible: follow_button.hovered || (AppFormFactor.coarsePointer && follow_button.pressed)
+                    delay: follow_button.pressed ? 0 : 300
                 }
             }
             FluIconButton {
@@ -162,8 +162,8 @@ FluPage {
                 onClicked: page.refresh()
                 FluTooltip {
                     text: qsTr("刷新个人空间")
-                    visible: refresh_button.hovered
-                    delay: 300
+                    visible: refresh_button.hovered || (AppFormFactor.coarsePointer && refresh_button.pressed)
+                    delay: refresh_button.pressed ? 0 : 300
                 }
             }
         }

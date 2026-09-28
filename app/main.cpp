@@ -1,5 +1,7 @@
 #include <QApplication>
+#include <QEvent>
 #include <QIcon>
+#include <QInputDevice>
 #include <QLibrary>
 #include <QLocale>
 #include <QQmlApplicationEngine>
@@ -10,6 +12,53 @@
 #include <QThreadPool>
 #include <QTranslator>
 #include <clocale>
+
+class TouchScreenMonitor : public QObject {
+    Q_OBJECT
+    Q_PROPERTY(bool available READ available NOTIFY availableChanged)
+public:
+    explicit TouchScreenMonitor(QObject *parent = nullptr) : QObject(parent) {
+        refresh();
+        qApp->installEventFilter(this);
+    }
+    bool available() const { return available_; }
+    bool eventFilter(QObject *watched, QEvent *event) override {
+        Q_UNUSED(watched);
+        switch (event->type()) {
+        case QEvent::TouchBegin:
+        case QEvent::TouchUpdate:
+            if (!available_) {
+                available_ = true;
+                emit availableChanged();
+            }
+            break;
+        case QEvent::ApplicationActivate:
+            refresh();
+            break;
+        default:
+            break;
+        }
+        return false;
+    }
+    Q_INVOKABLE void refresh() {
+        bool found = available_;
+        if (!found) {
+            for (const QInputDevice *device : QInputDevice::devices()) {
+                if (device->type() == QInputDevice::DeviceType::TouchScreen) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if (found == available_) return;
+        available_ = found;
+        emit availableChanged();
+    }
+signals:
+    void availableChanged();
+private:
+    bool available_ = false;
+};
 
 #include "core/HistoryServiceEntry.h"
 #include "core/HistoryServiceWorker.h"
@@ -102,8 +151,10 @@ int main(int argc, char *argv[]) {
     MpvLib::instance()->probe();
 
     QQmlApplicationEngine engine;
+    auto *touchScreen = new TouchScreenMonitor(&app);
     engine.addImportPath(QCoreApplication::applicationDirPath());
     engine.rootContext()->setContextProperty("AppPreferences", preferences);
+    engine.rootContext()->setContextProperty("TouchScreen", touchScreen);
     engine.rootContext()->setContextProperty("MpvLib", MpvLib::instance());
 
     // Controller 桥接(命名与 WinUI 页面对应,见 doc/qt-migration-notes.md)
@@ -173,3 +224,5 @@ int main(int argc, char *argv[]) {
     QThreadPool::globalInstance()->waitForDone();
     return exitCode;
 }
+
+#include "main.moc"
